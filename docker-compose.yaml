@@ -1,0 +1,92 @@
+# owl-trace — install compose file. Pipe it straight into `docker compose`,
+# no clone needed:
+#
+#   curl -fsS https://raw.githubusercontent.com/OneEyed-King/owl-trace-deploy/main/docker-compose.yaml \
+#     | docker compose -f - up -d
+#
+# See README.md in this repo for the full walkthrough (ports, how it works,
+# data/privacy notes, and how to remove it later).
+
+name: owl-trace
+
+services:
+  engine:
+    image: vishal7868/owl-trace-engine:latest
+    container_name: owl-trace-engine
+    restart: unless-stopped
+    cgroup: host
+    environment:
+      STALE_AFTER_SECONDS: "60"
+      SLOW_THRESHOLD_MS: "500"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_DATABASE: "otel"
+      ENGINE_API_KEY: "${OWL_ENGINE_API_KEY:-owl-trace-dev-key-change-me}"
+    volumes:
+      - owl-trace-app-state:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/hostproc:ro
+    ports:
+      - "${OWLTRACE_OTLP_PORT:-4318}:4318"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks: [owl-trace]
+
+  web:
+    image: vishal7868/owl-trace-web:latest
+    container_name: owl-trace-web
+    restart: unless-stopped
+    environment:
+      ENGINE_URL: "http://engine:8080"
+      ENGINE_API_KEY: "${OWL_ENGINE_API_KEY:-owl-trace-dev-key-change-me}"
+    ports:
+      - "${OWLTRACE_UI_PORT:-8973}:8080"
+    depends_on:
+      - engine
+    networks: [owl-trace]
+
+  beyla:
+    image: vishal7868/owl-trace-beyla:latest
+    container_name: owl-trace-beyla
+    restart: unless-stopped
+    pid: host
+    privileged: true
+    init: true
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /sys/kernel/tracing:/sys/kernel/tracing:ro
+    environment:
+      BEYLA_CONFIG_PATH: "/etc/beyla/config.yml"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://engine:4318"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json"
+      OTEL_METRICS_EXPORTER: "none"
+    networks: [owl-trace]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: owl-trace-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    volumes:
+      - owl-trace-clickhouse-data:/var/lib/clickhouse
+    # No host port published by default — ClickHouse has no auth enabled
+    # (CLICKHOUSE_SKIP_USER_SETUP above), so it's kept off the host
+    # network entirely unless you deliberately want it. If you want to
+    # point your own Grafana/BI tool at it, add a port mapping yourself
+    # via an override file and bind it to your own IP, not 0.0.0.0 — see
+    # README.md's "Connecting your own tools to ClickHouse" section.
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [owl-trace]
+
+networks:
+  owl-trace: {}
+
+volumes:
+  owl-trace-app-state: {}
+  owl-trace-clickhouse-data: {}

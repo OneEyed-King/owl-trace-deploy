@@ -7,6 +7,11 @@ entirely on your own machine.
 This repo is just the install file and instructions. It exists so you can spin
 up owl-trace with a single command, without cloning the actual source.
 
+Licensed under the [Elastic License 2.0](./LICENSE) — you can self-host and
+use owl-trace freely, including for internal production use; you just can't
+offer it to others as a hosted/managed service. See `LICENSE` for the full
+terms.
+
 ## Requirements
 
 - Linux host (Beyla's eBPF tracing needs a Linux kernel — this won't work on

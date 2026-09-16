@@ -1,0 +1,110 @@
+# owl-trace — PUBLIC DEMO compose file. Time-limited, zero-login install,
+# same one-liner pattern as docker-compose.yaml:
+#
+#   curl -fsS https://raw.githubusercontent.com/OneEyed-King/owl-trace-deploy/main/docker-compose.demo.yaml \
+#     | docker compose -f - up -d
+#
+# Two real differences from docker-compose.yaml (the "real" install file):
+#
+#   1. Images are the "-demo" packages (owl-trace-engine-demo, etc.),
+#      published PUBLIC on GHCR — no `docker login` needed at all, matching
+#      the zero-friction install experience of tools like Coroot. The
+#      "real" images stay private under separate package names; GHCR
+#      visibility is set per-package, not per-tag, which is exactly why
+#      these had to be separate packages rather than just a different tag
+#      on the same one.
+#   2. The engine image itself expires on a fixed date. This is
+#      deliberately NOT an environment variable here — an earlier version
+#      of this file set LICENSE_EXPIRES_AT right in this environment
+#      block, which meant anyone could bypass it just by editing this
+#      public YAML before running it, no image tampering needed at all.
+#      The expiry date is now baked into the engine image's filesystem at
+#      build time instead (see ui/engine/Dockerfile's LICENSE_EXPIRES_AT
+#      build ARG and server.js's "Demo license expiry" comment) — there is
+#      no override for it here because that's the point. It's a local
+#      check only (no network call, nothing phones home), and it's a
+#      deterrent, not an unbreakable lock — paired with the Elastic
+#      License's anti-circumvention clause as the legal backstop, same
+#      posture as every other vendor's self-hosted license gate.
+#
+# To cut a fresh demo window: rebuild the engine image with a new
+# --build-arg LICENSE_EXPIRES_AT=YYYY-MM-DD, push it, no changes needed
+# here.
+
+name: owl-trace-demo
+
+services:
+  engine:
+    image: ghcr.io/oneeyed-king/owl-trace-engine-demo:latest
+    container_name: owl-trace-engine
+    restart: unless-stopped
+    cgroup: host
+    environment:
+      STALE_AFTER_SECONDS: "60"
+      SLOW_THRESHOLD_MS: "500"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_DATABASE: "otel"
+      ENGINE_API_KEY: "${OWL_ENGINE_API_KEY:-owl-trace-dev-key-change-me}"
+    volumes:
+      - owl-trace-app-state:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/hostproc:ro
+    ports:
+      - "${OWLTRACE_OTLP_PORT:-4318}:4318"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks: [owl-trace]
+
+  web:
+    image: ghcr.io/oneeyed-king/owl-trace-web-demo:latest
+    container_name: owl-trace-web
+    restart: unless-stopped
+    environment:
+      ENGINE_URL: "http://engine:8080"
+      ENGINE_API_KEY: "${OWL_ENGINE_API_KEY:-owl-trace-dev-key-change-me}"
+    ports:
+      - "${OWLTRACE_UI_PORT:-8973}:8080"
+    depends_on:
+      - engine
+    networks: [owl-trace]
+
+  beyla:
+    image: ghcr.io/oneeyed-king/owl-trace-beyla-demo:latest
+    container_name: owl-trace-beyla
+    restart: unless-stopped
+    pid: host
+    privileged: true
+    init: true
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /sys/kernel/tracing:/sys/kernel/tracing:ro
+    environment:
+      BEYLA_CONFIG_PATH: "/etc/beyla/config.yml"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://engine:4318"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/json"
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json"
+      OTEL_METRICS_EXPORTER: "none"
+    networks: [owl-trace]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: owl-trace-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    volumes:
+      - owl-trace-clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [owl-trace]
+
+networks:
+  owl-trace: {}
+
+volumes:
+  owl-trace-app-state: {}
+  owl-trace-clickhouse-data: {}

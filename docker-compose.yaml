@@ -11,7 +11,7 @@ name: owl-trace
 
 services:
   engine:
-    image: vishal7868/owl-trace-engine:latest
+    image: ghcr.io/oneeyed-king/owl-trace-engine:latest
     container_name: owl-trace-engine
     restart: unless-stopped
     cgroup: host
@@ -33,7 +33,7 @@ services:
     networks: [owl-trace]
 
   web:
-    image: vishal7868/owl-trace-web:latest
+    image: ghcr.io/oneeyed-king/owl-trace-web:latest
     container_name: owl-trace-web
     restart: unless-stopped
     environment:
@@ -46,7 +46,7 @@ services:
     networks: [owl-trace]
 
   beyla:
-    image: vishal7868/owl-trace-beyla:latest
+    image: ghcr.io/oneeyed-king/owl-trace-beyla:latest
     container_name: owl-trace-beyla
     restart: unless-stopped
     pid: host

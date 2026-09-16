@@ -20,12 +20,42 @@ terms.
 - Enough free RAM for ClickHouse — 1–2 GB is comfortable for a demo-sized
   stack
 
-## Turning it on
+## Try it now — public demo (no login, 10-day trial)
+
+The fastest way to see owl-trace running — public images, no `docker login`:
 
 ```bash
+curl -fsS https://raw.githubusercontent.com/OneEyed-King/owl-trace-deploy/main/docker-compose.demo.yaml \
+  | docker compose -f - up -d
+```
+
+Then open **http://localhost:8973**.
+
+The 10-day trial window starts counting from the moment you first run this
+— not from whenever it was built — so it doesn't matter how long ago this
+was pushed. Restarting the containers doesn't reset the clock; only
+deleting the data volume entirely would. Nothing is deleted when it
+expires; the dashboard just shows a clear "this demo has expired" screen.
+Remove it the same way as the full install (see
+[Removing it](#removing-it)), swapping the project name to `owl-trace-demo`.
+
+Want it running past that date, or need it unattended for real? See the
+full install below.
+
+## Turning it on
+
+The engine/web/beyla images are private on GitHub Container Registry —
+reach out for read access, then:
+
+```bash
+echo <your-PAT> | docker login ghcr.io -u <your-github-username> --password-stdin
+
 curl -fsS https://raw.githubusercontent.com/OneEyed-King/owl-trace-deploy/main/docker-compose.yaml \
   | docker compose -f - up -d
 ```
+
+(The PAT needs the `read:packages` scope — generate one under GitHub →
+Settings → Developer settings → Personal access tokens.)
 
 That pulls four prebuilt images (`engine`, `web`, `beyla`, `clickhouse`) and
 starts them. First run takes a minute or two while images download.
